@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<project name="SmartBibleHive" default="all">
+  <property name="extension.name" value="SmartBibleHive" />
+  <property name="Extensions.dir" location="out" />
+  <property name="AndroidRuntime-classes.dir" location="build/classes"/>
+  <property name="ExternalComponent.dir" location="build/externalComponents" />
+  <property name="ExternalComponent-class.dir" location="build/externalComponents-classes" />
+  <property name="lib.dir" location="lib" />
+
+  <target name="all" depends="extensions" />
+
+  <target name="clean">
+    <delete dir="build" />
+    <delete dir="out" />
+  </target>
+
+  <taskdef resource="net/sf/antcontrib/antcontrib.properties">
+    <classpath>
+      <fileset dir="${lib.dir}">
+        <include name="**/ant-contrib*.jar"/>
+      </fileset>
+    </classpath>
+  </taskdef>
+
+  <target name="javac">
+    <mkdir dir="${AndroidRuntime-classes.dir}" />
+    <javac target="1.7" source="1.7" destdir="${AndroidRuntime-classes.dir}" srcdir="src" encoding="utf-8" includeantruntime="false">
+      <classpath>
+        <fileset dir="${lib.dir}">
+            <include name="**/*.jar" />
+        </fileset>
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="process" depends="javac">
+    <mkdir dir="${ExternalComponent.dir}" />
+    <mkdir dir="${ExternalComponent-class.dir}" />
+    <java failonerror="true" classname="com.google.appinventor.components.scripts.ExternalComponentGenerator">
+      <classpath>
+        <fileset dir="${lib.dir}">
+            <include name="**/*.jar" />
+        </fileset>
+      </classpath>
+      <arg path="${AndroidRuntime-classes.dir}/simple_components.json" />
+      <arg path="${AndroidRuntime-classes.dir}/simple_components_build_info.json" />
+      <arg path="${ExternalComponent.dir}" />
+      <arg path="${AndroidRuntime-classes.dir}" />
+      <arg path="lib/deps" />
+      <arg path="${ExternalComponent-class.dir}" />
+      <arg value="false" />
+    </java>
+  </target>
+
+  <target name="jarAllExtensions" depends="process">
+    <foreach target="jarExtension" param="extension" inheritall="true">
+      <path><dirset dir="${ExternalComponent-class.dir}"><include name="*" /></dirset></path>
+    </foreach>
+  </target>
+
+  <target name="jarExtension">
+    <basename property="extensionClassFolder" file="${extension}" />
+    <jar destfile="${ExternalComponent-class.dir}/${extensionClassFolder}.jar">
+        <fileset dir="${ExternalComponent-class.dir}/${extensionClassFolder}" includes="**/*.class" />
+        
+        <!-- CRITICAL HIVE STEP: Map the 1,354 txt files from src into the internal jar assets folder -->
+        <mappedresources>
+            <fileset dir="src/com/bible/hive/assets/bible" includes="*.txt"/>
+            <globmapper from="*" to="assets/bible/*"/>
+        </mappedresources>
+    </jar>
+    
+    <copy file="${ExternalComponent-class.dir}/${extensionClassFolder}.jar"
+          tofile="${ExternalComponent.dir}/${extensionClassFolder}/files/AndroidRuntime.jar"/>
+  </target>
+
+  <target name="dexAllExtensions" depends="jarAllExtensions">
+    <foreach target="dexExtension" param="extension">
+      <path><fileset dir="${ExternalComponent-class.dir}"><include name="*.jar"/></fileset></path>
+    </foreach>
+  </target>
+
+  <target name="dexExtension">
+    <basename property="extensionType" file="${extension}" suffix=".jar"/>
+    <java jar="lib/appinventor/dx.jar" fork="true" failonerror="true">
+      <arg value="--dex"/><arg value="--no-strict"/><arg value="--output"/>
+      <arg value="${ExternalComponent.dir}/${extensionType}/classes.jar"/>
+      <arg value="${ExternalComponent-class.dir}/${extensionType}.jar"/>
+    </java>
+  </target>
+
+  <target name="extensions" depends="dexAllExtensions">
+    <foreach target="packExtension" param="extension" inheritall="true">
+      <path><dirset dir="${ExternalComponent.dir}"><include name="*" /></dirset></path>
+    </foreach>
+  </target>
+
+  <!-- THE CORRECTED RESPECTIVE METHOD FOR AIX PACKAGING -->
+  <target name="packExtension">
+    <basename property="extensionType" file="${extension}" />
+    
+    <!-- 
+      By using basedir="${ExternalComponent.dir}" and includes="${extensionType}/**/*",
+      we force the ZIP to contain the package folder (e.g. com.bible.hive) at the root level.
+    -->
+    <zip level="9" 
+         destfile="${Extensions.dir}/${extensionType}.aix" 
+         basedir="${ExternalComponent.dir}" 
+         includes="${extensionType}/**/*" />
+    
+    <echo message="***************************************************" />
+    <echo message=" SUCCESS: ${extensionType}.aix created using the Respective Method" />
+    <echo message=" Internal root folder: ${extensionType}/" />
+    <echo message="***************************************************" />
+  </target>
+
+</project>
